@@ -366,60 +366,7 @@ with m3:
     )
 with m4:
     st.metric(
-        label="AI Forecasting Model",
+        label="AI Model",
         value="WeatherNext 3",
-        delta="Google DeepMind" if weather_info["is_google_api"] else "Fallback active"
+        delta="Google Maps API" if weather_info["is_google_api"] else "Fallback active"
     )
-
-# 24-Hour Forecast Timeline
-if timeline:
-    st.markdown("#### 3. 24-Hour Precipitation Timeline")
-    df_timeline = pd.DataFrame(timeline)
-    
-    # Clean time labels for charting
-    def format_time_label(t):
-        try:
-            if "T" in t:
-                parts = t.split("T")[1][:5]
-                return parts
-            return t
-        except Exception:
-            return t
-
-    df_timeline["Hour"] = df_timeline["time"].apply(format_time_label)
-
-    chart_col1, chart_col2 = st.columns(2)
-    with chart_col1:
-        st.markdown("**Rain Probability (%) across Next 24 Hours**")
-        st.bar_chart(df_timeline.set_index("Hour")["rain_prob"], color="#3b82f6")
-    with chart_col2:
-        st.markdown(f"**Precipitation Amount ({precip_unit}) across Next 24 Hours**")
-        st.bar_chart(df_timeline.set_index("Hour")["precipitation"], color="#0284c7")
-
-# Location Map & Model Details
-st.markdown("#### 4. Location & Geographic Context")
-map_col, info_col = st.columns([1.2, 1.0])
-
-with map_col:
-    map_data = pd.DataFrame({
-        "lat": [st.session_state.selected_lat],
-        "lon": [st.session_state.selected_lon]
-    })
-    st.map(map_data, zoom=11)
-
-with info_col:
-    st.markdown("##### 📡 Data Source & Model Verification")
-    st.write(f"**Primary Model:** Google DeepMind WeatherNext 3")
-    st.write(f"**Active Source:** `{source_name}`")
-    st.write(f"**Spatial Resolution:** 5x5 kilometer grid")
-    st.write(f"**Temporal Frequency:** Hourly initialization from live satellite feeds")
-    
-    if not weather_info["is_google_api"]:
-        st.info(
-            "👉 To switch from the simulation feed to direct Google WeatherNext 3 API queries, "
-            "add your Google Maps / Weather API key to your `.env` file (`GOOGLE_WEATHER_API_KEY=...`)."
-        )
-
-# Raw API Response Inspection
-with st.expander("🛠️ Developer Tool: Inspect Raw WeatherNext 3 Payload"):
-    st.json(weather_info.get("raw_response", {}))
