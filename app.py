@@ -98,24 +98,20 @@ if "selected_lon" not in st.session_state:
 with st.sidebar:
     st.markdown("### ⚙️ WeatherNext 3 Settings")
 
+    # Load API key silently from .env, environment variables, or st.secrets
     env_google_key = os.getenv("GOOGLE_WEATHER_API_KEY") or os.getenv("GOOGLE_MAPS_API_KEY", "")
     if not env_google_key:
         try:
             env_google_key = st.secrets.get("GOOGLE_WEATHER_API_KEY") or st.secrets.get("GOOGLE_MAPS_API_KEY", "")
         except Exception:
             pass
-    api_key_input = st.text_input(
-        "Google Maps / Weather API Key",
-        value=st.session_state.get("google_api_key", env_google_key),
-        type="password",
-        help="Google Weather API (weather.googleapis.com) runs on Google DeepMind WeatherNext 3."
-    )
-    st.session_state.google_api_key = api_key_input.strip()
+    
+    st.session_state.google_api_key = (env_google_key or "").strip()
 
     if st.session_state.google_api_key:
-        st.success("🟢 Google WeatherNext 3 API Key Connected")
+        st.success("🟢 Google WeatherNext 3 Live Model Active")
     else:
-        st.info("ℹ️ No Google API key entered. Running in **Fallback / Simulation Mode** (Open-Meteo live feed). Enter your Google Cloud Weather API key above to query WeatherNext 3 directly.")
+        st.info("ℹ️ Using Fallback Simulation Mode (Configure key in `.env` to activate live WeatherNext 3)")
 
     units = st.selectbox("Units System", ["METRIC (°C, mm)", "IMPERIAL (°F, in)"], index=0)
     units_code = "METRIC" if "METRIC" in units else "IMPERIAL"
@@ -375,9 +371,9 @@ with info_col:
     st.write(f"**Temporal Frequency:** Hourly initialization from live satellite feeds")
     
     if not weather_info["is_google_api"]:
-        st.warning(
+        st.info(
             "👉 To switch from the simulation feed to direct Google WeatherNext 3 API queries, "
-            "paste your Google Maps / Weather API key into the sidebar."
+            "add your Google Maps / Weather API key to your `.env` file (`GOOGLE_WEATHER_API_KEY=...`)."
         )
 
 # Raw API Response Inspection
