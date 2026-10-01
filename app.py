@@ -88,11 +88,37 @@ detected = st.session_state.detected_loc
 if "selected_location_name" not in st.session_state:
     st.session_state.selected_location_name = detected["name"]
 
+if "loc_text_input" not in st.session_state:
+    st.session_state["loc_text_input"] = detected["name"]
+
 if "selected_lat" not in st.session_state:
     st.session_state.selected_lat = detected["latitude"]
 
 if "selected_lon" not in st.session_state:
     st.session_state.selected_lon = detected["longitude"]
+
+# Location management callbacks
+def set_location(lat: float, lon: float, name: str):
+    st.session_state.selected_lat = lat
+    st.session_state.selected_lon = lon
+    st.session_state.selected_location_name = name
+    st.session_state["loc_text_input"] = name
+    st.session_state.pop("search_error", None)
+
+def reset_to_current_location():
+    fresh = WeatherNextService.detect_current_location()
+    st.session_state.detected_loc = fresh
+    set_location(fresh["latitude"], fresh["longitude"], fresh["name"])
+
+def search_location():
+    query = st.session_state.get("loc_text_input", "").strip()
+    if query:
+        geo_res = WeatherNextService.geocode_location(query, st.session_state.get("google_api_key"))
+        if geo_res:
+            glat, glon, gname = geo_res
+            set_location(glat, glon, gname)
+        else:
+            st.session_state["search_error"] = f"Could not locate '{query}'. Please check the spelling or enter coordinates."
 
 # Sidebar Configuration
 with st.sidebar:
@@ -130,11 +156,10 @@ with st.sidebar:
     }
 
     for city_name, (clat, clon, cdisplay) in popular_cities.items():
-        if st.button(city_name, use_container_width=True):
-            st.session_state.selected_location_name = cdisplay
-            st.session_state.selected_lat = clat
-            st.session_state.selected_lon = clon
-            st.rerun()
+        if city_name == "📍 My Current Location":
+            st.button(city_name, on_click=reset_to_current_location, use_container_width=True)
+        else:
+            st.button(city_name, on_click=set_location, args=(clat, clon, cdisplay), use_container_width=True)
 
     st.divider()
     st.markdown("""
@@ -161,30 +186,19 @@ with col_loc:
     st.markdown("**Location Input** (Default: Current Location)")
     loc_input = st.text_input(
         "Enter City, Address, or 'lat, lon'",
-        value=st.session_state.selected_location_name,
         key="loc_text_input",
-        help="Type any city or address, or click 'Use My Location'."
+        on_change=search_location,
+        help="Type any city or address and press Enter, or click 'Search Location'."
     )
+
+    if "search_error" in st.session_state:
+        st.error(st.session_state["search_error"])
 
     btn_sub_col1, btn_sub_col2 = st.columns([1, 1])
     with btn_sub_col1:
-        if st.button("📍 Reset to Current Location", use_container_width=True):
-            st.session_state.selected_location_name = detected["name"]
-            st.session_state.selected_lat = detected["latitude"]
-            st.session_state.selected_lon = detected["longitude"]
-            st.rerun()
+        st.button("📍 Reset to Current Location", on_click=reset_to_current_location, use_container_width=True)
     with btn_sub_col2:
-        if st.button("🔎 Search Location", use_container_width=True):
-            if loc_input.strip():
-                geo_res = WeatherNextService.geocode_location(loc_input.strip(), st.session_state.google_api_key)
-                if geo_res:
-                    glat, glon, gname = geo_res
-                    st.session_state.selected_lat = glat
-                    st.session_state.selected_lon = glon
-                    st.session_state.selected_location_name = gname
-                    st.rerun()
-                else:
-                    st.error("Could not locate that address. Please try another query or coordinates.")
+        st.button("🔎 Search Location", on_click=search_location, use_container_width=True)
 
 with col_time:
     st.markdown("**Time Input** (Default: Right Now)")
