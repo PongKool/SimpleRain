@@ -168,6 +168,38 @@ class WeatherNextService:
         else:
             return cls._query_open_meteo(lat, lon, target_time, units)
 
+    @staticmethod
+    def _extract_google_local_time(fh: Dict[str, Any]) -> Tuple[datetime, str]:
+        """
+        Extract local datetime and formatted label from Google Weather API forecastHour.
+        Uses displayDateTime (local time at coordinates) rather than UTC interval.startTime.
+        """
+        disp = fh.get("displayDateTime")
+        if isinstance(disp, dict) and "year" in disp and "hours" in disp:
+            try:
+                y = int(disp.get("year", 2026))
+                m = int(disp.get("month", 1))
+                d = int(disp.get("day", 1))
+                h = int(disp.get("hours", 0))
+                minute = int(disp.get("minutes", 0))
+                dt = datetime(y, m, d, h, minute)
+                return dt, dt.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                pass
+
+        # Fallback to interval.startTime (+7 hours for Thailand if ends with Z)
+        iso = fh.get("interval", {}).get("startTime", "")
+        if iso:
+            try:
+                clean_iso = iso.replace("Z", "+00:00")
+                dt_utc = datetime.fromisoformat(clean_iso)
+                dt_local = dt_utc + timedelta(hours=7)
+                return dt_local.replace(tzinfo=None), dt_local.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                pass
+
+        return datetime.now(), datetime.now().strftime("%Y-%m-%d %H:%M")
+
     @classmethod
     def _query_google_weathernext(
         cls,
@@ -179,7 +211,7 @@ class WeatherNextService:
     ) -> Dict[str, Any]:
         """
         Calls Google Maps Platform Weather API endpoints powered by WeatherNext 3.
-        Supports both real-time ('now') and target datetime forecast/history.
+        Supports both real-time ('now') and target datetime forecast/history in local Thailand time.
         """
         is_now = target_time is None
         now_dt = datetime.now()
@@ -215,10 +247,10 @@ class WeatherNextService:
         if resp_forecast.status_code == 200:
             forecast_hours = resp_forecast.json().get("forecastHours", [])
 
-        # Parse timeline
+        # Parse timeline using exact local time
         timeline = []
         for fh in forecast_hours:
-            t_str = fh.get("interval", {}).get("startTime", "") or fh.get("displayDateTime", "")
+            dt_local, t_str = cls._extract_google_local_time(fh)
             fh_cond = fh.get("weatherCondition", {})
             fh_type = fh_cond.get("type", "")
             fh_desc = fh_cond.get("description", {}).get("text", "")
@@ -228,6 +260,7 @@ class WeatherNextService:
             fh_qpf = fh.get("precipitation", {}).get("qpf", {}).get("quantity", 0.0)
             timeline.append({
                 "time": t_str,
+                "dt": dt_local,
                 "temp": fh.get("temperature", {}).get("degrees", 0),
                 "condition": fh_desc or fh_type,
                 "rain_prob": int(fh_prob or 0),
@@ -252,23 +285,19 @@ class WeatherNextService:
             precip_prob = int(curr_data.get("precipitationProbability", 0))
 
             is_raining = any(k in cond_type or k in cond_text.upper() for k in rain_keywords) or (precip_val > 0.05)
-            matched_time_str = "Now (Real-time)"
+            matched_time_str = datetime.now().strftime("%Y-%m-%d %H:%M")
         else:
-            # Match target hour in forecastHours
+            # Match target hour in forecastHours using exact local time
             best_fh = forecast_hours[0]
+            best_time_str = target_time.strftime("%Y-%m-%d %H:%M")
             min_diff = float("inf")
             for fh in forecast_hours:
-                start_iso = fh.get("interval", {}).get("startTime", "") or fh.get("displayDateTime", "")
-                try:
-                    # Clean ISO format
-                    dt_clean = start_iso.replace("Z", "+00:00")
-                    fh_dt = datetime.fromisoformat(dt_clean).replace(tzinfo=None)
-                    diff = abs((fh_dt - target_time).total_seconds())
-                    if diff < min_diff:
-                        min_diff = diff
-                        best_fh = fh
-                except Exception:
-                    continue
+                dt_local, t_str = cls._extract_google_local_time(fh)
+                diff = abs((dt_local - target_time).total_seconds())
+                if diff < min_diff:
+                    min_diff = diff
+                    best_fh = fh
+                    best_time_str = t_str
 
             fh_cond = best_fh.get("weatherCondition", {})
             cond_text = fh_cond.get("description", {}).get("text", "Unknown")
