@@ -278,7 +278,8 @@ with c1:
 with c2:
     st.info(f"🌐 **Coordinates:** `{st.session_state.selected_lat:.4f}, {st.session_state.selected_lon:.4f}`")
 with c3:
-    time_label = "Right Now (Live)" if target_dt is None else target_dt.strftime("%Y-%m-%d %H:%M")
+    now_thailand_str = datetime.now().strftime("%H:%M")
+    time_label = f"Right Now ({now_thailand_str} ICT)" if target_dt is None else target_dt.strftime("%Y-%m-%d %H:%M")
     st.info(f"⏰ **Time:** {time_label} • `{tz_display}`")
 
 # Extract Core Findings
@@ -294,7 +295,7 @@ source_name = weather_info["source"]
 icon_url = weather_info.get("icon_url", "")
 
 # Rain Result Hero Card
-st.markdown("#### 2. Rain Status Result")
+st.markdown("### 2. Rain Status Result")
 
 # Check if rain is expected soon if not currently raining
 timeline = weather_info.get("timeline", [])
@@ -309,9 +310,9 @@ if not is_raining and timeline and target_dt is None:
             next_rain_prob = item["rain_prob"]
             break
 
-time_context_title = "actively detected" if target_dt is None else f"forecasted at {weather_info.get('target_time_label', time_label)}"
-card_headline_rain = "🌧️ YES, IT IS RAINING!" if target_dt is None else f"🌧️ YES, RAIN FORECASTED AT {weather_info.get('target_time_label', time_label)}!"
-card_headline_norain = "☀️ NO, IT IS NOT RAINING" if target_dt is None else f"☀️ NO RAIN FORECASTED AT {weather_info.get('target_time_label', time_label)}"
+time_context_title = "actively detected right now" if target_dt is None else f"forecasted at {weather_info.get('target_time_label', time_label)}"
+card_headline_rain = "🌧️ YES, IT IS RAINING RIGHT NOW!" if target_dt is None else f"🌧️ YES, RAIN FORECASTED AT {weather_info.get('target_time_label', time_label)}!"
+card_headline_norain = "☀️ NO, IT IS NOT RAINING RIGHT NOW" if target_dt is None else f"☀️ NO RAIN FORECASTED AT {weather_info.get('target_time_label', time_label)}"
 
 if is_raining:
     st.markdown(f"""
