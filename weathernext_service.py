@@ -326,7 +326,7 @@ class WeatherNextService:
             precip_val = float(best_fh.get("precipitation", {}).get("qpf", {}).get("quantity", 0.0))
 
             is_raining = any(k in cond_type or k in cond_text.upper() for k in rain_keywords) or (precip_val > 0.05) or (precip_prob >= 60 and "RAIN" in cond_text.upper())
-            matched_time_str = best_fh.get("interval", {}).get("startTime", "") or target_time.strftime("%Y-%m-%d %H:%M")
+            matched_time_str = best_time_str
 
         tz_name = curr_data.get("timeZone", {}).get("id", "Asia/Bangkok")
 
@@ -451,7 +451,7 @@ class WeatherNextService:
 
             temp_val = temps[target_idx] if target_idx < len(temps) else 0.0
             humidity_val = humids[target_idx] if target_idx < len(humids) else 0
-            matched_time_str = times[target_idx]
+            matched_time_str = times[target_idx].replace("T", " ")
 
         # Build timeline around the target index (show 24 hours starting from max(0, target_idx - 2))
         start_slice = max(0, target_idx - 2)

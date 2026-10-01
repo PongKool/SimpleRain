@@ -318,9 +318,10 @@ if not is_raining and timeline and target_dt is None:
             next_rain_prob = item["rain_prob"]
             break
 
-time_context_title = "actively detected right now" if target_dt is None else f"forecasted at {weather_info.get('target_time_label', time_label)}"
-card_headline_rain = "🌧️ YES, IT IS RAINING RIGHT NOW!" if target_dt is None else f"🌧️ YES, RAIN FORECASTED AT {weather_info.get('target_time_label', time_label)}!"
-card_headline_norain = "☀️ NO, IT IS NOT RAINING RIGHT NOW" if target_dt is None else f"☀️ NO RAIN FORECASTED AT {weather_info.get('target_time_label', time_label)}"
+disp_time = weather_info.get("target_time_label", time_label)
+time_context_title = "actively detected right now" if target_dt is None else f"forecasted for {disp_time}"
+card_headline_rain = "🌧️ YES, IT IS RAINING RIGHT NOW!" if target_dt is None else f"🌧️ YES, RAIN FORECASTED AT {disp_time}!"
+card_headline_norain = "☀️ NO, IT IS NOT RAINING RIGHT NOW" if target_dt is None else f"☀️ NO RAIN FORECASTED AT {disp_time}"
 
 if is_raining:
     st.markdown(f"""
