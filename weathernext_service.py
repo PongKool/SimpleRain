@@ -108,6 +108,43 @@ class WeatherNextService:
         return None
 
     @classmethod
+    def reverse_geocode(cls, lat: float, lon: float, google_key: Optional[str] = None) -> str:
+        """
+        Reverse geocodes latitude, longitude into a human-readable city/address.
+        """
+        if google_key:
+            try:
+                g_url = "https://maps.googleapis.com/maps/api/geocode/json"
+                params = {"latlng": f"{lat},{lon}", "key": google_key}
+                resp = requests.get(g_url, params=params, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("status") == "OK" and data.get("results"):
+                        return data["results"][0].get("formatted_address", f"GPS ({lat:.4f}, {lon:.4f})")
+            except Exception:
+                pass
+
+        try:
+            headers = {"User-Agent": "SimpleRainWeatherNextApp/1.0"}
+            url = "https://nominatim.openstreetmap.org/reverse"
+            params = {"lat": lat, "lon": lon, "format": "json"}
+            resp = requests.get(url, params=params, headers=headers, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                addr = data.get("address", {})
+                city = addr.get("city") or addr.get("town") or addr.get("suburb") or addr.get("state") or ""
+                country = addr.get("country", "")
+                if city and country:
+                    return f"{city}, {country}"
+                elif data.get("display_name"):
+                    parts = data["display_name"].split(",")
+                    return ", ".join(parts[:2]).strip()
+        except Exception:
+            pass
+
+        return f"Device GPS ({lat:.4f}, {lon:.4f})"
+
+    @classmethod
     def get_weather_data(
         cls,
         lat: float,
