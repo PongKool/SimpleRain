@@ -232,14 +232,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Push the small '«' button to the bottom-right corner of the sidebar
-    _, col_close = st.columns([4, 1])
-    with col_close:
-        if st.button("«", key="bottom_collapse_btn", help="Back to main page"):
-            st.session_state.sidebar_state = "collapsed"
-            st.rerun()
-    st.session_state.sidebar_state = "expanded"
-    
     st.markdown("""
     **About Google WeatherNext 3:**
     - Developed by **Google DeepMind & Google Research**
@@ -247,6 +239,28 @@ with st.sidebar:
     - Direct assimilation of real-time geostationary satellite data
     - Hourly forecasts & rapid updates
     """)
+
+    # Push the small '«' button to the bottom-right corner of the sidebar
+    _, col_close = st.columns([4, 1])
+    with col_close:
+        if st.button("«", key="bottom_collapse_btn", help="Back to main page"):
+            import streamlit.components.v1 as components
+            components.html(
+                """
+                <script>
+                const doc = window.parent.document;
+                const collapseBtn = doc.querySelector('[data-testid="stSidebarCollapseButton"] button') 
+                                 || doc.querySelector('[data-testid="collapsedControl"] button')
+                                 || doc.querySelector('section[data-testid="stSidebar"] button[kind="header"]')
+                                 || doc.querySelector('section[data-testid="stSidebar"] button[kind="headerNoPadding"]');
+                if (collapseBtn) {
+                    collapseBtn.click();
+                }
+                </script>
+                """,
+                height=0,
+                width=0,
+            )
 
 # Main Page Header
 st.markdown('<div class="main-title">🌧️ RainCheck AI</div>', unsafe_allow_html=True)
