@@ -1,7 +1,7 @@
 # 🌧️ RainCheck AI (Streamlit)
 
-A modern Streamlit web application that detects whether rain is currently falling or forecasted to fall at any location and time, powered by **Google's WeatherNext 3** (via Google Maps Platform Weather API).
-
+A modern Streamlit web application that detects whether rain is currently falling or forecasted to fall at any location and time, powered by **Google's WeatherNext 3** (via Google Maps Platform Weather API). 
+Check out https://simplerain.streamlit.app/
 ---
 
 ## ✨ Features
