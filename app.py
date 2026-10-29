@@ -213,11 +213,6 @@ with st.sidebar:
     units_code = "METRIC" if "METRIC" in units else "IMPERIAL"
 
     st.divider()
-    if st.button("« Collapse Sidebar", use_container_width=True):
-        st.session_state.sidebar_state = "collapsed"
-        st.rerun()
-    # Reset back to expanded for future reruns if the user re-opens it manually
-    st.session_state.sidebar_state = "expanded"
 
     st.markdown("### 📍 Quick Location Selector")
     quick_locations = {
@@ -236,6 +231,15 @@ with st.sidebar:
             st.button(loc_name, on_click=set_location, args=(clat, clon, cdisplay), use_container_width=True)
 
     st.divider()
+
+    # Push the small '«' button to the bottom-right corner of the sidebar
+    _, col_close = st.columns([4, 1])
+    with col_close:
+        if st.button("«", key="bottom_collapse_btn", help="Back to main page"):
+            st.session_state.sidebar_state = "collapsed"
+            st.rerun()
+    st.session_state.sidebar_state = "expanded"
+    
     st.markdown("""
     **About Google WeatherNext 3:**
     - Developed by **Google DeepMind & Google Research**
