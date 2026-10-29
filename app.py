@@ -47,7 +47,7 @@ st.set_page_config(
     page_title="RainCheck — Google WeatherNext 3",
     page_icon="🌧️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state=st.session_state.get("sidebar_state", "expanded")
 )
 
 # Custom CSS for modern weather dashboard aesthetics
@@ -213,6 +213,11 @@ with st.sidebar:
     units_code = "METRIC" if "METRIC" in units else "IMPERIAL"
 
     st.divider()
+    if st.button("« Collapse Sidebar", use_container_width=True):
+        st.session_state.sidebar_state = "collapsed"
+        st.rerun()
+    # Reset back to expanded for future reruns if the user re-opens it manually
+    st.session_state.sidebar_state = "expanded"
 
     st.markdown("### 📍 Quick Location Selector")
     quick_locations = {
