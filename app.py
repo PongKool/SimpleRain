@@ -271,26 +271,24 @@ st.markdown(
 
 # Input Section: Location and Time
 st.markdown("#### 1. Input Parameters")
-
 col_loc, col_time = st.columns([1.2, 1.0])
 
 with col_loc:
     st.markdown("**Location Input** (Default: Current Location)")
     loc_input = st.text_input(
-        "Enter City, Address, or 'lat, lon'",
-        key="loc_text_input",
+        "Enter City, Address, or 'lat, lon'", 
+        key="loc_text_input", 
         on_change=search_location,
         help="Type any city or address and press Enter, or click 'Search Location'."
     )
-
     if st.session_state.get("is_device_gps"):
         st.success(f"📱 **Real Phone GPS Active:** `{st.session_state.selected_location_name}`")
     else:
         st.caption("💡 *Tap 'Detect Phone Location' and allow location permissions on your phone to use exact GPS.*")
-
+        
     if "search_error" in st.session_state:
         st.error(st.session_state["search_error"])
-
+        
     btn_sub_col1, btn_sub_col2 = st.columns([1, 1])
     with btn_sub_col1:
         st.button("📍 Detect Phone Location", on_click=reset_to_current_location, use_container_width=True)
@@ -300,20 +298,28 @@ with col_loc:
 with col_time:
     st.markdown("**Time Input** (Default: Right Now)")
     time_mode = st.radio(
-        "Select Time Mode",
-        ["⚡ Right Now (Real-time)", "📅 Specific Time (Forecast)", "🗓️ 5 Day Forecast"],
+        "Select Time Mode", 
+        ["⚡ Right Now (Real-time)", "⏱️ Custom Hour Forecast", "📅 Specific Time (Forecast)", "🗓️ 5 Day Forecast"], 
         horizontal=True
     )
-
+    
     target_dt = None
-    if time_mode == "📅 Specific Time (Forecast)":
-        now_dt = get_thailand_now()
+    now_dt = get_thailand_now()
+    
+    if time_mode == "⏱️ Custom Hour Forecast":
+        # Let user specify number of hours ahead
+        hours_ahead = st.slider("Hours ahead to forecast", min_value=1, max_value=72, value=3, step=1)
+        target_dt = now_dt + timedelta(hours=hours_ahead)
+        st.caption(f"Target is set to **{hours_ahead} hours** ahead ({target_dt.strftime('%Y-%m-%d %H:%M')} ICT).")
+        
+    elif time_mode == "📅 Specific Time (Forecast)":
         t_col1, t_col2 = st.columns(2)
         with t_col1:
             sel_date = st.date_input("Date", value=now_dt.date())
         with t_col2:
             sel_time = st.time_input("Time", value=now_dt.time())
         target_dt = datetime.combine(sel_date, sel_time)
+        
         delta_hours = (target_dt - now_dt).total_seconds() / 3600.0
         if delta_hours > 0:
             st.caption(f"Target is **{delta_hours:.1f} hours** into the future.")
@@ -321,11 +327,12 @@ with col_time:
             st.caption(f"Target is **{abs(delta_hours):.1f} hours** in the past.")
         else:
             st.caption("Target is approximately current time.")
+            
     elif time_mode in ["🗓️ 5 Day Forecast", "🗓️ 7 Day Forecast"]:
         st.caption("Showing 5-day weather & rain forecast.")
     else:
-        st.caption(f"Checking immediate live weather at: **{get_thailand_now().strftime('%Y-%m-%d %H:%M:%S')} (Thailand Time / ICT, UTC+7)**")
-
+        st.caption(f"Checking immediate live weather at: **{now_dt.strftime('%Y-%m-%d %H:%M:%S')} (Thailand Time / ICT, UTC+7)**")
+        
 st.divider()
 
 if time_mode in ["🗓️ 5 Day Forecast", "🗓️ 7 Day Forecast"]:
