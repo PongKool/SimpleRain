@@ -217,4 +217,413 @@ with st.sidebar:
         except Exception:
             pass
 
-    st.session_state.google_api_key = (env
+    st.session_state.google_api_key = (env_google_key or "").strip()
+
+    if st.session_state.google_api_key:
+        st.success("🟢 Google WeatherNext 3 Live Model Active")
+    else:
+        st.info("ℹ️ Using Fallback Simulation Mode (Configure key in `.env` to activate live WeatherNext 3)")
+
+    units = st.selectbox("Units System", ["METRIC (°C, mm)", "IMPERIAL (°F, in)"], index=0)
+    units_code = "METRIC" if "METRIC" in units else "IMPERIAL"
+
+    st.divider()
+    st.markdown("### 📍 Quick Location Selector")
+    quick_locations = {
+        "📍 My Current Location": (detected["latitude"], detected["longitude"], detected["name"]),
+        "ดอนเมือง, กทม.": (13.9126, 100.6067, "ดอนเมือง, กทม."),
+        "AIT, ปทุมธานี": (14.0781, 100.6150, "AIT, ปทุมธานี"),
+        "คลองสอง, คลองหลวง": (14.0600, 100.6400, "คลองสอง, คลองหลวง"),
+        "สวทช. คลองหนึ่ง": (14.0785, 100.6015, "สวทช. คลองหนึ่ง"),
+        "วัดนกกระจาบ อยุธยา": (14.3168, 100.4162, "วัดนกกระจาบ อยุธยา")
+    }
+
+    for loc_name, (clat, clon, cdisplay) in quick_locations.items():
+        if loc_name == "📍 My Current Location":
+            st.button(loc_name, on_click=reset_to_current_location, use_container_width=True)
+        else:
+            st.button(loc_name, on_click=set_location, args=(clat, clon, cdisplay), use_container_width=True)
+
+    st.divider()
+    st.markdown("""
+    **About Google WeatherNext 3:**
+    - Developed by **Google DeepMind & Google Research**
+    - High resolution: **5x5 km grid**
+    - Direct assimilation of real-time geostationary satellite data
+    - Hourly forecasts & rapid updates
+    """)
+
+    _, col_close = st.columns([4, 1])
+    with col_close:
+        if st.button("«", key="bottom_collapse_btn", help="Back to main page"):
+            import streamlit.components.v1 as components
+            components.html("""
+            <script>
+            const doc = window.parent.document;
+            const collapseBtn = doc.querySelector('[data-testid="stSidebarCollapseButton"] button') ||
+                                doc.querySelector('[data-testid="collapsedControl"] button') ||
+                                doc.querySelector('section[data-testid="stSidebar"] button[kind="header"]') ||
+                                doc.querySelector('section[data-testid="stSidebar"] button[kind="headerNoPadding"]');
+            if (collapseBtn) {
+                collapseBtn.click();
+            }
+            </script>
+            """, height=0, width=0)
+
+# Main Page Header
+st.markdown('<div class="main-title">🌧️ RainCheck AI</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="sub-title">Real-time rain detection & forecasting powered by <strong>Google DeepMind WeatherNext 3</strong></div>',
+    unsafe_allow_html=True
+)
+
+# Input Section: Location and Time
+st.markdown("#### 1. Input Parameters")
+col_loc, col_time = st.columns([1.2, 1.0])
+
+with col_loc:
+    st.markdown("**Location Input** (Default: Current Location)")
+    loc_input = st.text_input(
+        "Enter City, Address, or 'lat, lon'",
+        key="loc_text_input",
+        on_change=search_location,
+        help="Type any city or address and press Enter, or click 'Search Location'."
+    )
+    if st.session_state.get("is_device_gps"):
+        st.success(f"📱 **Real Phone GPS Active:** `{st.session_state.selected_location_name}`")
+    else:
+        st.caption("💡 *Tap 'Detect Phone Location' and allow location permissions on your phone to use exact GPS.*")
+
+    if "search_error" in st.session_state:
+        st.error(st.session_state["search_error"])
+
+    btn_sub_col1, btn_sub_col2 = st.columns([1, 1])
+    with btn_sub_col1:
+        st.button("📍 Detect Phone Location", on_click=reset_to_current_location, use_container_width=True)
+    with btn_sub_col2:
+        st.button("🔎 Search Location", on_click=search_location, use_container_width=True)
+
+with col_time:
+    st.markdown("**Time Input** (Default: Right Now)")
+    time_mode = st.radio(
+        "Select Time Mode",
+        ["⚡ Right Now (Real-time)", "⏱️ Next N Hours Window", "📅 Specific Time (Forecast)", "🗓️ 5 Day Forecast"],
+        horizontal=True
+    )
+
+    target_dt = None
+    window_hours = None
+    now_dt = get_thailand_now()
+
+    if time_mode == "⏱️ Next N Hours Window":
+        window_hours = st.slider("Duration from now (hours)", min_value=1, max_value=48, value=6, step=1)
+        end_window_dt = now_dt + timedelta(hours=window_hours)
+        st.caption(f"Forecasting rain probability from **Now** until **{window_hours} hours ahead** (up to {end_window_dt.strftime('%H:%M')} ICT).")
+    elif time_mode == "📅 Specific Time (Forecast)":
+        t_col1, t_col2 = st.columns(2)
+        with t_col1:
+            sel_date = st.date_input("Date", value=now_dt.date())
+        with t_col2:
+            sel_time = st.time_input("Time", value=now_dt.time())
+        target_dt = datetime.combine(sel_date, sel_time)
+        delta_hours = (target_dt - now_dt).total_seconds() / 3600.0
+        if delta_hours > 0:
+            st.caption(f"Target is **{delta_hours:.1f} hours** into the future.")
+        elif delta_hours < -0.1:
+            st.caption(f"Target is **{abs(delta_hours):.1f} hours** in the past.")
+        else:
+            st.caption("Target is approximately current time.")
+    elif time_mode in ["🗓️ 5 Day Forecast", "🗓️ 7 Day Forecast"]:
+        st.caption("Showing 5-day weather & rain forecast.")
+    else:
+        st.caption(f"Checking immediate live weather at: **{now_dt.strftime('%Y-%m-%d %H:%M:%S')} (Thailand Time / ICT, UTC+7)**")
+
+st.divider()
+
+if time_mode in ["🗓️ 5 Day Forecast", "🗓️ 7 Day Forecast"]:
+    with st.spinner("Querying Google WeatherNext 3 5-Day Forecast..."):
+        weather_info = WeatherNextService.get_5day_forecast(
+            lat=st.session_state.selected_lat,
+            lon=st.session_state.selected_lon,
+            google_api_key=st.session_state.google_api_key if st.session_state.google_api_key else None,
+            units=units_code
+        )
+
+    if weather_info.get("api_warning"):
+        st.warning(weather_info["api_warning"])
+
+    tz_display = f"{weather_info.get('timezone', 'Asia/Bangkok')} ({weather_info.get('utc_offset', 'UTC+7')})"
+
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c1:
+        st.info(f"📌 **Target:** {st.session_state.selected_location_name}")
+    with c2:
+        st.info(f"🌐 **Coordinates:** `{st.session_state.selected_lat:.4f}, {st.session_state.selected_lon:.4f}`")
+    with c3:
+        st.info(f"⏰ **Time:** 🗓️ 5-Day Forecast • `{tz_display}`")
+
+    daily_list = weather_info.get("daily_forecast", [])
+    total_days = len(daily_list) if daily_list else 5
+    rain_days = sum(1 for d in daily_list if d["is_raining"])
+    max_rain_prob = max((d["rain_prob"] for d in daily_list), default=0)
+    total_precip = sum(d["precipitation_sum"] for d in daily_list)
+    precip_unit = daily_list[0]["precipitation_unit"] if daily_list else "mm"
+    temp_unit = daily_list[0]["temp_unit"] if daily_list else "°C"
+
+    st.markdown("### 2. 5-Day Rain Status Summary")
+    if rain_days >= 3:
+        st.markdown(f"""
+        <div class="status-card-rain">
+            <div class="card-headline">🌧️ RAIN EXPECTED ON {rain_days} OF THE NEXT {total_days} DAYS</div>
+            <div class="card-detail">
+                Frequent rain expected at <strong>{st.session_state.selected_location_name}</strong>.<br>
+                Total expected precipitation: <strong>{total_precip:.1f} {precip_unit}</strong> | Peak rain chance: <strong>{max_rain_prob}%</strong>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    elif rain_days > 0:
+        st.markdown(f"""
+        <div class="status-card-warning">
+            <div class="card-headline">🌦️ RAIN EXPECTED ON {rain_days} OF THE NEXT {total_days} DAYS</div>
+            <div class="card-detail">
+                Some rainy days predicted at <strong>{st.session_state.selected_location_name}</strong>.<br>
+                Total expected precipitation: <strong>{total_precip:.1f} {precip_unit}</strong> | Peak rain chance: <strong>{max_rain_prob}%</strong>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div class="status-card-norain">
+            <div class="card-headline">☀️ MOSTLY DRY & CLEAR FOR THE NEXT {total_days} DAYS</div>
+            <div class="card-detail">
+                No major rain forecasted over the next {total_days} days at <strong>{st.session_state.selected_location_name}</strong>.<br>
+                Peak rain chance remains low at <strong>{max_rain_prob}%</strong>.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric(
+            label="Rainy Days",
+            value=f"{rain_days} / {total_days} Days",
+            delta="Rainy Period" if rain_days >= 3 else ("Some Rain" if rain_days > 0 else "Dry Period"),
+            delta_color="normal" if rain_days > 0 else "off"
+        )
+    with m2:
+        st.metric(label="Peak Rain Chance", value=f"{max_rain_prob}%", delta="Highest Probability")
+    with m3:
+        st.metric(label="5-Day Total Precip", value=f"{total_precip:.1f} {precip_unit}", delta="Cumulative")
+    with m4:
+        st.metric(
+            label="AI Model",
+            value="WeatherNext 3",
+            delta="Google Maps API" if weather_info["is_google_api"] else "Fallback active"
+        )
+
+    st.divider()
+    st.markdown("### 🗓️ 5-Day Daily Forecast Cards")
+    cols = st.columns(len(daily_list) if daily_list else 1)
+    for idx, day in enumerate(daily_list):
+        with cols[idx]:
+            card_class = "daily-card-rain" if day["is_raining"] else "daily-card"
+            st.markdown(f"""
+            <div class="{card_class}">
+                <div style="font-weight:700; font-size:1.05rem; color:#1E293B;">{day['day_name']}</div>
+                <div style="font-size:0.8rem; color:#64748B; margin-bottom:4px;">{day['date_display'].split(', ')[1]}</div>
+                <img src="{day['icon_url']}" width="40" style="margin:2px 0;" />
+                <div style="font-size:0.8rem; font-weight:600; color:#334155; min-height:34px; display:flex; align-items:center; justify-content:center;">{day['condition_text']}</div>
+                <div style="font-size:0.95rem; font-weight:700; color:#0F172A; margin:4px 0;">{round(day['temp_max'])}° / {round(day['temp_min'])}°{day['temp_unit']}</div>
+                <div style="font-size:0.85rem; color:#2563EB; font-weight:600;">💧 {day['rain_prob']}%</div>
+                <div style="font-size:0.75rem; color:#64748B;">{day['precipitation_sum']} {day['precipitation_unit']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+else:
+    # Fetch Weather Data
+    with st.spinner("Querying Google WeatherNext 3 model data..."):
+        weather_info = WeatherNextService.get_weather_data(
+            lat=st.session_state.selected_lat,
+            lon=st.session_state.selected_lon,
+            target_time=target_dt,
+            google_api_key=st.session_state.google_api_key if st.session_state.google_api_key else None,
+            units=units_code
+        )
+
+    if weather_info.get("api_warning"):
+        st.warning(weather_info["api_warning"])
+
+    tz_display = f"{weather_info.get('timezone', 'Asia/Bangkok')} ({weather_info.get('utc_offset', 'UTC+7')})"
+
+    now_thailand_str = get_thailand_now().strftime("%H:%M")
+    if window_hours:
+        end_window_dt = now_dt + timedelta(hours=window_hours)
+        time_label = f"Next {window_hours} Hours ({now_thailand_str} - {end_window_dt.strftime('%H:%M')} ICT)"
+    elif target_dt is None:
+        time_label = f"Right Now ({now_thailand_str} ICT)"
+    else:
+        time_label = target_dt.strftime("%Y-%m-%d %H:%M")
+
+    # Coordinate Confirmation and Query Badges
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c1:
+        st.info(f"📌 **Target:** {st.session_state.selected_location_name}")
+    with c2:
+        st.info(f"🌐 **Coordinates:** `{st.session_state.selected_lat:.4f}, {st.session_state.selected_lon:.4f}`")
+    with c3:
+        st.info(f"⏰ **Time:** {time_label} • `{tz_display}`")
+
+    # Extract Core Findings
+    is_raining = weather_info["is_raining"]
+    precip_rate = weather_info["precipitation_rate"]
+    precip_prob = weather_info["precipitation_prob"]
+    precip_unit = weather_info["precipitation_unit"]
+    cond_text = weather_info["condition_text"]
+    temp_deg = weather_info["temperature"]
+    temp_unit = weather_info["temperature_unit"]
+    humidity = weather_info["humidity"]
+    source_name = weather_info["source"]
+    icon_url = weather_info.get("icon_url", "")
+    timeline = weather_info.get("timeline", [])
+
+    st.markdown("### 2. Rain Status Result")
+
+    # Handle window aggregation if "Next N Hours Window" is selected
+    if window_hours:
+        end_window_dt = now_dt + timedelta(hours=window_hours)
+        window_items = []
+        for item in timeline:
+            item_dt = item.get("dt")
+            if not item_dt and "time" in item:
+                try:
+                    clean_t = str(item["time"]).replace("T", " ")
+                    item_dt = datetime.strptime(clean_t, "%Y-%m-%d %H:%M")
+                except Exception:
+                    pass
+            if item_dt and now_dt <= item_dt <= (end_window_dt + timedelta(minutes=30)):
+                window_items.append((item_dt, item))
+
+        if window_items:
+            max_p = max(it[1].get("rain_prob", 0) for it in window_items)
+            max_r = max(it[1].get("precipitation", 0.0) for it in window_items)
+            first_rain_entry = next((it for it in window_items if it[1].get("rain_prob", 0) >= 50 or it[1].get("precipitation", 0.0) > 0.1), None)
+
+            precip_prob = max_p
+            precip_rate = max_r
+            is_rain_in_window = (max_p >= 50 or max_r > 0.1)
+
+            precip_scale = classify_precip_intensity(precip_rate, units_code)
+            loc_display_name = st.session_state.selected_location_name
+
+            if is_rain_in_window:
+                rain_start_str = first_rain_entry[0].strftime("%H:%M") if first_rain_entry else "soon"
+                st.markdown(f"""
+                <div class="status-card-rain">
+                    <div class="card-headline">🌧️ RAIN EXPECTED IN THE NEXT {window_hours} HOURS!</div>
+                    <div class="card-detail">
+                        Rain is expected between <strong>{now_thailand_str}</strong> and <strong>{end_window_dt.strftime('%H:%M')} ICT</strong> at 📍 <strong>{loc_display_name}</strong>.<br>
+                        Rain starts around: <strong>{rain_start_str} ICT</strong> | Peak chance: <strong>{precip_prob}%</strong> | Peak intensity: <strong>{precip_rate} {precip_unit}/h ({precip_scale})</strong>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class="status-card-norain">
+                    <div class="card-headline">☀️ NO RAIN EXPECTED IN THE NEXT {window_hours} HOURS</div>
+                    <div class="card-detail">
+                        Conditions remain largely clear between <strong>{now_thailand_str}</strong> and <strong>{end_window_dt.strftime('%H:%M')} ICT</strong> at 📍 <strong>{loc_display_name}</strong>.<br>
+                        Peak rain chance is low at <strong>{precip_prob}%</strong> with negligible precipitation.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    else:
+        # Standard Single-Point / Real-Time evaluation
+        rain_expected_soon = False
+        next_rain_time = None
+        next_rain_prob = 0
+        if not is_raining and timeline and target_dt is None:
+            for item in timeline:
+                item_dt = item.get("dt")
+                if not item_dt and "time" in item:
+                    try:
+                        clean_t = str(item["time"]).replace("T", " ")
+                        item_dt = datetime.strptime(clean_t, "%Y-%m-%d %H:%M")
+                    except Exception:
+                        pass
+                if item_dt and item_dt <= now_dt:
+                    continue
+                if item.get("rain_prob", 0) >= 50 or item.get("precipitation", 0) > 0.1:
+                    rain_expected_soon = True
+                    next_rain_time = item["time"]
+                    next_rain_prob = item.get("rain_prob", 0)
+                    break
+
+        loc_display_name = st.session_state.selected_location_name
+        disp_time = weather_info.get("target_time_label", time_label) if isinstance(weather_info, dict) else time_label
+        precip_scale = weather_info.get("precipitation_intensity_label") if isinstance(weather_info, dict) else None
+        if not precip_scale:
+            precip_scale = classify_precip_intensity(precip_rate, units_code)
+
+        time_context_title = f"actively detected right now ({now_thailand_str} ICT)" if target_dt is None else f"forecasted for {disp_time}"
+        card_headline_rain = f"🌧️ YES, IT IS RAINING RIGHT NOW ({now_thailand_str})!" if target_dt is None else f"🌧️ YES, RAIN FORECASTED AT {disp_time}!"
+        card_headline_norain = f"☀️ NO, IT IS NOT RAINING RIGHT NOW ({now_thailand_str})" if target_dt is None else f"☀️ NO RAIN FORECASTED AT {disp_time}"
+
+        if is_raining:
+            st.markdown(f"""
+            <div class="status-card-rain">
+                <div class="card-headline">{card_headline_rain}</div>
+                <div class="card-detail">
+                    Rain is {time_context_title} at 📍 <strong>{loc_display_name}</strong>.<br>
+                    Expected precipitation: <strong>{precip_rate} {precip_unit}/h ({precip_scale})</strong> | Probability: <strong>{precip_prob}%</strong> | Condition: <strong>{cond_text}</strong>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        elif rain_expected_soon:
+            formatted_next_time = str(next_rain_time).replace("T", " ") if next_rain_time else ""
+            st.markdown(f"""
+            <div class="status-card-warning">
+                <div class="card-headline">🌦️ NO RAIN RIGHT NOW ({now_thailand_str}), BUT RAIN EXPECTED SOON!</div>
+                <div class="card-detail">
+                    It is not raining right now ({now_thailand_str} ICT) at 📍 <strong>{loc_display_name}</strong>, but WeatherNext 3 predicts rain around <strong>{formatted_next_time}</strong> (hourly forecast window) with a <strong>{next_rain_prob}%</strong> chance.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="status-card-norain">
+                <div class="card-headline">{card_headline_norain}</div>
+                <div class="card-detail">
+                    No rain {time_context_title} at 📍 <strong>{loc_display_name}</strong>.<br>
+                    Conditions are <strong>{cond_text}</strong> with <strong>{precip_prob}%</strong> chance of precipitation.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # Metrics Grid
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric(
+            label="Precipitation Intensity" if not window_hours else f"Peak Intensity (Next {window_hours}h)",
+            value=f"{precip_rate} {precip_unit}/h",
+            delta=f"Scale: {precip_scale}",
+            delta_color="normal" if (is_raining or (window_hours and precip_prob >= 50)) else "off"
+        )
+    with m2:
+        st.metric(
+            label="Rain Probability" if not window_hours else f"Peak Rain Chance (Next {window_hours}h)",
+            value=f"{precip_prob}%",
+            delta=f"Condition: {cond_text}"
+        )
+    with m3:
+        st.metric(
+            label="Temperature",
+            value=f"{temp_deg} {temp_unit}",
+            delta=f"Humidity: {humidity}%"
+        )
+    with m4:
+        st.metric(
+            label="AI Model",
+            value="WeatherNext 3",
+            delta="Google Maps API" if weather_info["is_google_api"] else "Fallback active"
+        )
